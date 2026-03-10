@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Roulette Predictor</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --gold:    #c9a84c;
+    --gold2:   #f0d080;
+    --felt:    #0a1f0e;
+    --felt2:   #0e2914;
+    --dark:    #060d07;
+    --text:    #e8dfc4;
+    --muted:   #7a6e56;
+    --red:     #c0392b;
+    --black:   #1a1a1a;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    background: var(--dark);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+    user-select: none;
+  }
+
+  /* ── Background texture ─────────────────────────── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background:
+      radial-gradient(ellipse at 20% 50%, rgba(10,31,14,.7) 0%, transparent 60%),
+      radial-gradient(ellipse at 80% 20%, rgba(201,168,76,.06) 0%, transparent 50%);
+    pointer-events: none; z-index: 0;
+  }
+
+  #app { position: relative; z-index: 1; max-width: 430px; margin: 0 auto; padding: 0 0 40px; }
+
+  /* ── Header ─────────────────────────────────────── */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 20px 12px;
+    border-bottom: 1px solid rgba(201,168,76,.2);
+  }
+  .logo {
+    font-family: 'Playfair Display', serif;
+    font-size: 20px; font-weight: 900;
+    color: var(--gold);
+    letter-spacing: .04em;
+  }
+  .logo span { color: var(--text); font-weight: 400; }
+  #connDot {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: #555; transition: background .4s;
+  }
+  #connDot.on { background: #4caf50; box-shadow: 0 0 8px #4caf5088; }
+
+  /* ── Camera view ────────────────────────────────── */
+  #cameraWrap {
+    position: relative; width: 100%;
+    aspect-ratio: 1 / 1;
+    background: #000;
+    overflow: hidden;
+  }
+  #video {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    display: block;
+    transform: scaleX(-1); /* mirror for natural feel */
+  }
+  #overlay {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+  }
+  #tapTarget {
+    position: absolute; inset: 0;
+    cursor: crosshair;
+  }
+  #camLabel {
+    position: absolute; bottom: 10px; left: 50%;
+    transform: translateX(-50%);
+    font-size: 12px; color: rgba(255,255,255,.6);
+    background: rgba(0,0,0,.5);
+    padding: 4px 10px; border-radius: 20px;
+    backdrop-filter: blur(4px);
+    pointer-events: none;
+    white-space: nowrap;
+  }
+
+  /* ── Step indicator ─────────────────────────────── */
+  #steps {
+    display: flex; gap: 6px;
+    padding: 14px 20px 0;
+    align-items: center;
+  }
+  .step {
+    flex: 1; height: 3px;
+    background: rgba(201,168,76,.15);
+    border-radius: 2px;
+    transition: background .4s;
+  }
+  .step.done { background: var(--gold); }
+  .step.active { background: var(--gold2); box-shadow: 0 0 8px var(--gold2); }
+
+  #stepLabel {
+    padding: 10px 20px 0;
+    font-size: 13px; color: var(--muted);
+    letter-spacing: .03em;
+    min-height: 22px;
+  }
+
+  /* ── Prediction card ────────────────────────────── */
+  #predCard {
+    margin: 14px 16px 0;
+    background: linear-gradient(145deg, var(--felt2), var(--felt));
+    border: 1px solid rgba(201,168,76,.3);
+    border-radius: 18px;
+    padding: 22px 20px 18px;
+    display: none;
+    position: relative;
+    overflow: hidden;
+  }
+  #predCard::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: repeating-linear-gradient(
+      45deg,
+      transparent, transparent 3px,
+      rgba(201,168,76,.02) 3px, rgba(201,168,76,.02) 4px
+    );
+  }
+  .pred-top {
+    display: flex; align-items: flex-start;
+    justify-content: space-between;
+    position: relative;
+  }
+  .pred-label {
+    font-size: 11px; letter-spacing: .12em; color: var(--muted);
+    text-transform: uppercase; margin-bottom: 6px;
+  }
+  .big-num {
+    font-family: 'Playfair Display', serif;
+    font-size: 88px; font-weight: 900;
+    line-height: 1;
+    color: var(--gold);
+    text-shadow: 0 0 30px rgba(201,168,76,.4);
+    transition: all .3s;
+  }
+  .big-num.red { color: #e74c3c; text-shadow: 0 0 30px rgba(231,76,60,.4); }
+  .big-num.green { color: #2ecc71; text-shadow: 0 0 30px rgba(46,204,113,.4); }
+
+  .conf-wrap { flex: 1; margin-left: 20px; padding-top: 8px; }
+  .conf-label { font-size: 11px; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; margin-bottom: 8px; }
+  .conf-ring {
+    width: 72px; height: 72px; margin: 0 auto;
+    position: relative;
+  }
+  .conf-ring svg { transform: rotate(-90deg); }
+  .conf-ring circle { transition: stroke-dashoffset .5s ease; }
+  .conf-pct {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; font-weight: 500; color: var(--gold);
+  }
+
+  .stats-row {
+    display: flex; gap: 8px; margin-top: 16px;
+    position: relative;
+  }
+  .stat-box {
+    flex: 1;
+    background: rgba(0,0,0,.35);
+    border: 1px solid rgba(201,168,76,.15);
+    border-radius: 10px;
+    padding: 10px 8px 8px;
+    text-align: center;
+  }
+  .stat-val { font-size: 20px; font-weight: 500; color: var(--gold2); }
+  .stat-lbl { font-size: 10px; color: var(--muted); margin-top: 3px; letter-spacing: .06em; }
+
+  .nearby-row {
+    display: flex; gap: 6px; margin-top: 12px;
+    justify-content: center;
+    position: relative;
+  }
+  .nearby-num {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 500;
+    border: 1px solid rgba(201,168,76,.2);
+    transition: all .3s;
+  }
+  .nearby-num.red-num { background: rgba(192,57,43,.25); color: #e74c3c; }
+  .nearby-num.black-num { background: rgba(0,0,0,.4); color: var(--text); }
+  .nearby-num.green-num { background: rgba(46,204,113,.2); color: #2ecc71; }
+  .nearby-num.center { transform: scale(1.25); border-color: var(--gold); }
+
+  /* ── Controls ───────────────────────────────────── */
+  #controls { padding: 14px 16px 0; display: flex; gap: 10px; }
+
+  .btn {
+    flex: 1; padding: 15px 10px;
+    border: none; border-radius: 12px;
+    font-family: 'DM Mono', monospace;
+    font-size: 14px; font-weight: 500;
+    cursor: pointer; transition: all .2s;
+    letter-spacing: .04em;
+  }
+  #btnCalib {
+    background: linear-gradient(135deg, var(--gold), #a07830);
+    color: var(--dark);
+  }
+  #btnTrack {
+    background: linear-gradient(135deg, #1a5c24, #0d3314);
+    color: var(--gold);
+    border: 1px solid rgba(201,168,76,.3);
+  }
+  #btnReset {
+    background: rgba(255,255,255,.05);
+    color: var(--muted);
+    border: 1px solid rgba(255,255,255,.08);
+    flex: 0 0 52px; padding: 15px;
+  }
+  .btn:disabled { opacity: .35; cursor: not-allowed; }
+  .btn:not(:disabled):active { transform: scale(.97); }
+
+  /* ── Log ────────────────────────────────────────── */
+  #log {
+    margin: 12px 16px 0;
+    background: rgba(0,0,0,.3);
+    border: 1px solid rgba(255,255,255,.06);
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 11px; color: var(--muted);
+    min-height: 52px; max-height: 80px;
+    overflow-y: auto;
+    line-height: 1.7;
+  }
+  #log .ok { color: #4caf90; }
+  #log .warn { color: var(--gold); }
+  #log .err { color: #e74c3c; }
+
+  /* ── Volume bar ─────────────────────────────────── */
+  #volBar {
+    display: flex; align-items: center; gap: 10px;
+    margin: 12px 16px 0;
+    font-size: 11px; color: var(--muted);
+  }
+  #volBar input { flex: 1; accent-color: var(--gold); }
+
+  /* ── Pulse animation ────────────────────────────── */
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  .pulsing { animation: pulse 1.1s ease-in-out infinite; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header>
+    <div class="logo">🎰 Roulette<span>AI</span></div>
+    <div id="connDot"></div>
+  </header>
+
+  <!-- Camera -->
+  <div id="cameraWrap">
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="overlay"></canvas>
+    <div id="tapTarget"></div>
+    <div id="camLabel">Tap to calibrate</div>
+  </div>
+
+  <!-- Steps -->
+  <div id="steps">
+    <div class="step active" id="s0"></div>
+    <div class="step" id="s1"></div>
+    <div class="step" id="s2"></div>
+    <div class="step" id="s3"></div>
+  </div>
+  <div id="stepLabel">Step 1 — tap the center of the wheel</div>
+
+  <!-- Prediction -->
+  <div id="predCard">
+    <div class="pred-top">
+      <div>
+        <div class="pred-label">Predicted Number</div>
+        <div class="big-num" id="bigNum">—</div>
+      </div>
+      <div class="conf-wrap">
+        <div class="conf-label">Confidence</div>
+        <div class="conf-ring">
+          <svg width="72" height="72" viewBox="0 0 72 72">
+            <circle cx="36" cy="36" r="28" fill="none" stroke="rgba(201,168,76,.15)" stroke-width="5"/>
+            <circle id="confArc" cx="36" cy="36" r="28" fill="none"
+              stroke="var(--gold)" stroke-width="5"
+              stroke-dasharray="176" stroke-dashoffset="176"
+              stroke-linecap="round"/>
+          </svg>
+          <div class="conf-pct" id="confPct">0%</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="stats-row">
+      <div class="stat-box">
+        <div class="stat-val" id="sBall">—</div>
+        <div class="stat-lbl">BALL °/s</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-val" id="sWheel">—</div>
+        <div class="stat-lbl">WHEEL °/s</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-val" id="sTTL">—</div>
+        <div class="stat-lbl">SEC LEFT</div>
+      </div>
+    </div>
+
+    <div class="nearby-row" id="nearbyRow"></div>
+  </div>
+
+  <!-- Controls -->
+  <div id="controls">
+    <button class="btn" id="btnCalib" onclick="startCalib()">⚙ Calibrate</button>
+    <button class="btn" id="btnTrack" onclick="toggleTrack()" disabled>▶ Track</button>
+    <button class="btn" id="btnReset" onclick="resetAll()" title="Reset">↺</button>
+  </div>
+
+  <!-- Volume -->
+  <div id="volBar">
+    🔊 <input type="range" id="volSlider" min="0" max="1" step="0.05" value="0.9"
+       oninput="speechVolume = parseFloat(this.value)">
+    AirPod vol
+  </div>
+
+  <!-- Log -->
+  <div id="log"><span class="ok">Ready — press Calibrate to begin.</span></div>
+
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════════════════════════════════
+const ROULETTE_NUMBERS = [
+  0,32,15,19,4,21,2,25,17,34,6,27,13,36,
+  11,30,8,23,10,5,24,16,33,1,20,14,31,9,
+  22,18,29,7,28,12,35,3,26
+];
+const RED_NUMS = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
+const DROP_SPEED  = 120;  // deg/s — ball considered dropped below this
+const SAMPLE_MS   = 80;   // ~12fps tracking (iPhone does fine)
+const MIN_SAMPLES = 5;
+const MAX_SAMPLES = 40;
+
+// ═══════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════
+let calibStep = 0;          // 0=center, 1=edge, 2=marker, 3=done
+let wheelCenter = null;     // {x,y} in canvas px
+let wheelRadius = 0;
+let markerHue   = null;     // hue of reference marker sticker
+let tracking    = false;
+let trackTimer  = null;
+let trackData   = [];       // [{t, ballAngle, wheelAngle}]
+let prediction  = null;
+let speechVolume = 0.9;
+let lastSpoken  = null;
+let videoReady  = false;
+
+// ═══════════════════════════════════════════════════════════════
+// DOM
+// ═══════════════════════════════════════════════════════════════
+const video    = document.getElementById('video');
+const overlay  = document.getElementById('overlay');
+const ctx      = overlay.getContext('2d');
+const tapEl    = document.getElementById('tapTarget');
+const camLabel = document.getElementById('camLabel');
+const logEl    = document.getElementById('log');
+
+// ═══════════════════════════════════════════════════════════════
+// CAMERA INIT
+// ═══════════════════════════════════════════════════════════════
+async function startCamera() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: {ideal:1280}, height: {ideal:1280} },
+      audio: false
+    });
+    video.srcObject = stream;
+    video.onloadedmetadata = () => {
+      overlay.width  = video.videoWidth  || 640;
+      overlay.height = video.videoHeight || 640;
+      videoReady = true;
+      document.getElementById('connDot').classList.add('on');
+      log('Camera ready (' + overlay.width + '×' + overlay.height + ')', 'ok');
+    };
+  } catch(e) {
+    log('Camera error: ' + e.message, 'err');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CALIBRATION
+// ═══════════════════════════════════════════════════════════════
+function startCalib() {
+  calibStep = 0;
+  wheelCenter = null;
+  wheelRadius = 0;
+  markerHue   = null;
+  tracking    = false;
+  clearInterval(trackTimer);
+  trackData   = [];
+  prediction  = null;
+  document.getElementById('predCard').style.display = 'none';
+  document.getElementById('btnTrack').disabled = true;
+  setStep(0);
+  setLabel('Step 1 — tap the CENTER of the wheel');
+  camLabel.textContent = 'Tap wheel center';
+  tapEl.style.display = 'block';
+  drawOverlay();
+}
+
+tapEl.addEventListener('click', onTap);
+
+function onTap(e) {
+  if (!videoReady) return;
+  const rect = tapEl.getBoundingClientRect();
+  // Scale tap coords to canvas coords
+  const scaleX = overlay.width  / rect.width;
+  const scaleY = overlay.height / rect.height;
+  // video is mirrored so flip x
+  const cx = (rect.width - (e.clientX - rect.left)) * scaleX;
+  const cy = (e.clientY  - rect.top)  * scaleY;
+
+  if (calibStep === 0) {
+    wheelCenter = {x: cx, y: cy};
+    calibStep = 1;
+    setStep(1);
+    setLabel('Step 2 — tap any point on the OUTER EDGE of the wheel');
+    camLabel.textContent = 'Tap wheel edge';
+    log('Center set at (' + Math.round(cx) + ',' + Math.round(cy) + ')', 'ok');
+    drawOverlay();
+  }
+  else if (calibStep === 1) {
+    const dx = cx - wheelCenter.x, dy = cy - wheelCenter.y;
+    wheelRadius = Math.sqrt(dx*dx + dy*dy);
+    calibStep = 2;
+    setStep(2);
+    setLabel('Step 3 — tap on your REFERENCE STICKER on the wheel (any colored sticker)');
+    camLabel.textContent = 'Tap reference sticker';
+    log('Radius set: ' + Math.round(wheelRadius) + 'px', 'ok');
+    drawOverlay();
+  }
+  else if (calibStep === 2) {
+    // Sample the color at that pixel
+    const fc = sampleColor(cx, cy);
+    if (fc) {
+      markerHue = fc.h;
+      calibStep = 3;
+      setStep(3);
+      setLabel('✅ Calibrated! Press Track to start predicting.');
+      camLabel.textContent = 'Ready';
+      tapEl.style.display = 'none';
+      document.getElementById('btnTrack').disabled = false;
+      log('Marker hue: ' + Math.round(markerHue) + '°  Ready!', 'ok');
+      drawOverlay();
+    } else {
+      log('Could not sample color — try again', 'warn');
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TRACKING
+// ═══════════════════════════════════════════════════════════════
+function toggleTrack() {
+  if (tracking) stopTrack();
+  else startTrack();
+}
+
+function startTrack() {
+  if (!wheelCenter || wheelRadius < 10) {
+    log('Please calibrate first', 'warn'); return;
+  }
+  tracking = true;
+  trackData = [];
+  prediction = null;
+  document.getElementById('predCard').style.display = 'none';
+  document.getElementById('btnTrack').textContent = '⏹ Stop';
+  document.getElementById('btnTrack').style.background = 'linear-gradient(135deg,#5c1a1a,#330d0d)';
+  document.getElementById('btnTrack').style.color = '#e74c3c';
+  document.getElementById('btnCalib').disabled = true;
+  setLabel('Tracking… keep glasses/phone still');
+  log('Tracking started', 'ok');
+  trackTimer = setInterval(trackFrame, SAMPLE_MS);
+}
+
+function stopTrack() {
+  tracking = false;
+  clearInterval(trackTimer);
+  document.getElementById('btnTrack').textContent = '▶ Track';
+  document.getElementById('btnTrack').style.background = '';
+  document.getElementById('btnTrack').style.color = '';
+  document.getElementById('btnCalib').disabled = false;
+  setLabel('Stopped. Press Track to restart or Calibrate to recalibrate.');
+  log('Tracking stopped. ' + trackData.length + ' samples collected.', 'ok');
+}
+
+function trackFrame() {
+  if (!videoReady || !wheelCenter) return;
+
+  // Draw frame to offscreen canvas for pixel sampling
+  const fc = getFrame();
+  if (!fc) return;
+
+  const ballAngle  = detectBall(fc);
+  const wheelAngle = detectMarker(fc);
+
+  if (ballAngle === null) {
+    log('Ball not detected', 'warn');
+    drawOverlay(null, null);
+    return;
+  }
+
+  const point = { t: Date.now(), ballAngle, wheelAngle };
+  trackData.push(point);
+
+  // Live prediction update
+  if (trackData.length >= MIN_SAMPLES) {
+    prediction = computePrediction();
+    updatePredUI();
+  }
+
+  drawOverlay(ballAngle, wheelAngle);
+
+  if (trackData.length >= MAX_SAMPLES) {
+    stopTrack();
+    finalize();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FRAME CAPTURE
+// ═══════════════════════════════════════════════════════════════
+let offCanvas = null, offCtx = null, offData = null;
+
+function getFrame() {
+  if (!offCanvas) {
+    offCanvas = document.createElement('canvas');
+    offCanvas.width  = overlay.width;
+    offCanvas.height = overlay.height;
+    offCtx = offCanvas.getContext('2d', {willReadFrequently: true});
+  }
+  try {
+    offCtx.drawImage(video, 0, 0, offCanvas.width, offCanvas.height);
+    // flip x to undo mirror
+    offCtx.save();
+    offCtx.scale(-1,1);
+    offCtx.drawImage(video, -offCanvas.width, 0, offCanvas.width, offCanvas.height);
+    offCtx.restore();
+    offData = offCtx.getImageData(0, 0, offCanvas.width, offCanvas.height);
+    return offData;
+  } catch(e) { return null; }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// BALL DETECTION (brightest cluster in outer track ring)
+// ═══════════════════════════════════════════════════════════════
+function detectBall(imgData) {
+  const cx = wheelCenter.x, cy = wheelCenter.y;
+  const r  = wheelRadius;
+  const innerR = r * 0.82;  // ball track inner radius
+  const outerR = r * 1.05;  // ball track outer radius
+
+  let bestBright = -1, bestX = 0, bestY = 0;
+  const step = 3; // sample every 3px for speed
+
+  const d = imgData.data, W = imgData.width;
+
+  for (let y = Math.max(0, cy-outerR|0); y < Math.min(imgData.height, cy+outerR|0); y+=step) {
+    for (let x = Math.max(0, cx-outerR|0); x < Math.min(W, cx+outerR|0); x+=step) {
+      const dx = x-cx, dy = y-cy;
+      const dist = Math.sqrt(dx*dx+dy*dy);
+      if (dist < innerR || dist > outerR) continue;
+
+      const i = (y*W+x)*4;
+      const brightness = (d[i] + d[i+1] + d[i+2]) / 3;
+      if (brightness > bestBright) {
+        bestBright = brightness;
+        bestX = x; bestY = y;
+      }
+    }
+  }
+
+  if (bestBright < 160) return null; // no bright object found
+  return angleDeg(bestX - cx, bestY - cy);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// WHEEL MARKER DETECTION (colored sticker)
+// ═══════════════════════════════════════════════════════════════
+function detectMarker(imgData) {
+  if (markerHue === null) return 0;
+  const cx = wheelCenter.x, cy = wheelCenter.y;
+  const r  = wheelRadius;
+  const innerR = r * 0.1;
+  const outerR = r * 0.75;
+
+  let bestScore = -1, bestX = 0, bestY = 0;
+  const step = 4;
+  const d = imgData.data, W = imgData.width;
+
+  for (let y = Math.max(0, cy-outerR|0); y < Math.min(imgData.height, cy+outerR|0); y+=step) {
+    for (let x = Math.max(0, cx-outerR|0); x < Math.min(W, cx+outerR|0); x+=step) {
+      const dx = x-cx, dy = y-cy;
+      const dist = Math.sqrt(dx*dx+dy*dy);
+      if (dist < innerR || dist > outerR) continue;
+
+      const i = (y*W+x)*4;
+      const {h, s, v} = rgbToHsv(d[i], d[i+1], d[i+2]);
+      const hueDiff = Math.min(Math.abs(h - markerHue), 360 - Math.abs(h - markerHue));
+      if (hueDiff < 25 && s > 0.4 && v > 0.3) {
+        const score = s * v * (1 - hueDiff/25);
+        if (score > bestScore) { bestScore = score; bestX = x; bestY = y; }
+      }
+    }
+  }
+
+  if (bestScore < 0) return 0;
+  return angleDeg(bestX - cx, bestY - cy);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PHYSICS PREDICTION ENGINE
+// ═══════════════════════════════════════════════════════════════
+function computePrediction() {
+  const data = trackData;
+  if (data.length < MIN_SAMPLES) return null;
+
+  const t0    = data[0].t;
+  const times = data.map(d => (d.t - t0) / 1000);
+  const balls = unwrapAngles(data.map(d => d.ballAngle));
+  const wheels = unwrapAngles(data.map(d => d.wheelAngle));
+
+  const ballVel  = linearSlope(times, balls);
+  const wheelVel = linearSlope(times, wheels);
+
+  // Deceleration from first half vs second half
+  const mid = Math.floor(data.length / 2);
+  const earlyVel = linearSlope(times.slice(0, mid+1), balls.slice(0, mid+1));
+  const lateVel  = linearSlope(times.slice(mid), balls.slice(mid));
+  const dtHalf   = times[times.length-1] - times[mid];
+  const decel    = dtHalf > 0.5 ? (lateVel - earlyVel) / dtHalf : -30;
+
+  // Time to drop
+  const timeToLand = decel < 0
+    ? Math.min(Math.max((DROP_SPEED - Math.abs(ballVel)) / Math.abs(decel), 0.3), 12)
+    : 5;
+
+  // Project
+  const lastBall  = balls[balls.length-1];
+  const lastWheel = wheels[wheels.length-1];
+  const finalBall  = lastBall  + ballVel  * timeToLand + 0.5 * decel * timeToLand * timeToLand;
+  const finalWheel = lastWheel + wheelVel * timeToLand;
+
+  const relAngle = ((finalBall - finalWheel) % 360 + 360) % 360;
+  const n        = ROULETTE_NUMBERS.length;
+  const pktIdx   = Math.round((relAngle / 360) * n) % n;
+  const predicted = ROULETTE_NUMBERS[pktIdx];
+
+  const confidence = Math.min(92, Math.max(8,
+    Math.round(20 + data.length * 2.5 + Math.min(data.length, 15) * 1.5)
+  ));
+
+  // Nearby numbers
+  const nearby = [];
+  for (let offset = -2; offset <= 2; offset++) {
+    const idx = ((pktIdx + offset) % n + n) % n;
+    nearby.push({ num: ROULETTE_NUMBERS[idx], offset });
+  }
+
+  return {
+    predictedNumber: predicted,
+    confidence,
+    ballSpeed:  Math.round(Math.abs(ballVel)),
+    wheelSpeed: Math.round(Math.abs(wheelVel)),
+    timeToLand: Math.round(timeToLand * 10) / 10,
+    nearby,
+    decel: Math.round(decel),
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FINALIZE + SPEAK
+// ═══════════════════════════════════════════════════════════════
+function finalize() {
+  if (!prediction) { log('Not enough data for prediction', 'warn'); return; }
+  document.getElementById('predCard').style.display = 'block';
+  updatePredUI();
+  const num = prediction.predictedNumber;
+  if (lastSpoken !== num) {
+    speak('Number ' + num + '. Confidence ' + prediction.confidence + ' percent.');
+    lastSpoken = num;
+  }
+  log('Final prediction: ' + num + ' (' + prediction.confidence + '% conf)', 'ok');
+}
+
+function updatePredUI() {
+  if (!prediction) return;
+  const p = prediction;
+  const num = p.predictedNumber;
+
+  document.getElementById('predCard').style.display = 'block';
+
+  const bigNum = document.getElementById('bigNum');
+  bigNum.textContent = num;
+  bigNum.className = 'big-num ' + numColor(num);
+
+  const pct = p.confidence;
+  document.getElementById('confPct').textContent = pct + '%';
+  const circ = 176;
+  document.getElementById('confArc').style.strokeDashoffset = circ - (circ * pct / 100);
+
+  document.getElementById('sBall').textContent  = p.ballSpeed;
+  document.getElementById('sWheel').textContent = p.wheelSpeed;
+  document.getElementById('sTTL').textContent   = p.timeToLand + 's';
+
+  // Nearby numbers
+  const row = document.getElementById('nearbyRow');
+  row.innerHTML = '';
+  (p.nearby || []).forEach(n => {
+    const el = document.createElement('div');
+    el.className = 'nearby-num ' + numColor(n.num) + '-num' + (n.offset === 0 ? ' center' : '');
+    el.textContent = n.num;
+    row.appendChild(el);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CANVAS OVERLAY DRAWING
+// ═══════════════════════════════════════════════════════════════
+function drawOverlay(ballAngle, wheelAngle) {
+  ctx.clearRect(0, 0, overlay.width, overlay.height);
+  if (!wheelCenter || wheelRadius < 10) return;
+
+  const cx = wheelCenter.x, cy = wheelCenter.y, r = wheelRadius;
+
+  // Outer ring guide
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI*2);
+  ctx.strokeStyle = 'rgba(201,168,76,0.5)';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([8,6]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Inner ring
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.82, 0, Math.PI*2);
+  ctx.strokeStyle = 'rgba(201,168,76,0.2)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Center dot
+  ctx.beginPath();
+  ctx.arc(cx, cy, 5, 0, Math.PI*2);
+  ctx.fillStyle = 'rgba(201,168,76,0.8)';
+  ctx.fill();
+
+  // Ball position indicator
+  if (ballAngle !== null && ballAngle !== undefined) {
+    const rad = (ballAngle - 90) * Math.PI / 180;
+    const br  = r * 0.935;
+    const bx  = cx + br * Math.cos(rad);
+    const by  = cy + br * Math.sin(rad);
+
+    ctx.beginPath();
+    ctx.arc(bx, by, 10, 0, Math.PI*2);
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(bx, by, 10, 0, Math.PI*2);
+    ctx.strokeStyle = '#c9a84c';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
+  // Wheel marker indicator
+  if (wheelAngle !== null && wheelAngle !== undefined && markerHue !== null) {
+    const rad = (wheelAngle - 90) * Math.PI / 180;
+    const mr  = r * 0.5;
+    const mx  = cx + mr * Math.cos(rad);
+    const my  = cy + mr * Math.sin(rad);
+
+    ctx.beginPath();
+    ctx.arc(mx, my, 7, 0, Math.PI*2);
+    ctx.fillStyle = 'hsl(' + markerHue + ',100%,55%)';
+    ctx.fill();
+  }
+
+  // Tracking indicator
+  if (tracking) {
+    ctx.font = 'bold 12px DM Mono, monospace';
+    ctx.fillStyle = '#4caf90';
+    ctx.fillText('● ' + trackData.length + ' samples', cx - 35, cy - r - 10);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SPEECH (AirPods)
+// ═══════════════════════════════════════════════════════════════
+function speak(text) {
+  if (!window.speechSynthesis) { log('Speech not supported', 'warn'); return; }
+  window.speechSynthesis.cancel();
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.volume = speechVolume;
+  utter.rate   = 0.95;
+  utter.pitch  = 1.0;
+  // Pick a good voice if available
+  const voices = speechSynthesis.getVoices();
+  const preferred = voices.find(v => v.lang.startsWith('en') && v.name.includes('Samantha'))
+    || voices.find(v => v.lang.startsWith('en'));
+  if (preferred) utter.voice = preferred;
+  speechSynthesis.speak(utter);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// UTILITIES
+// ═══════════════════════════════════════════════════════════════
+function angleDeg(dx, dy) {
+  return ((Math.atan2(dy, dx) * 180 / Math.PI) + 360) % 360;
+}
+
+function unwrapAngles(angles) {
+  const out = [angles[0]];
+  for (let i = 1; i < angles.length; i++) {
+    let diff = angles[i] - angles[i-1];
+    if (diff >  180) diff -= 360;
+    if (diff < -180) diff += 360;
+    out.push(out[i-1] + diff);
+  }
+  return out;
+}
+
+function linearSlope(x, y) {
+  const n = x.length; if (n < 2) return 0;
+  const sx  = x.reduce((a,b) => a+b, 0);
+  const sy  = y.reduce((a,b) => a+b, 0);
+  const sxy = x.reduce((a,xi,i) => a+xi*y[i], 0);
+  const sx2 = x.reduce((a,xi) => a+xi*xi, 0);
+  const d   = n*sx2 - sx*sx;
+  return d === 0 ? 0 : (n*sxy - sx*sy) / d;
+}
+
+function sampleColor(px, py) {
+  if (!videoReady) return null;
+  const fc = getFrame();
+  if (!fc) return null;
+  const x = Math.round(px), y = Math.round(py);
+  if (x<0||y<0||x>=fc.width||y>=fc.height) return null;
+  const i = (y * fc.width + x) * 4;
+  return rgbToHsv(fc.data[i], fc.data[i+1], fc.data[i+2]);
+}
+
+function rgbToHsv(r, g, b) {
+  r/=255; g/=255; b/=255;
+  const max=Math.max(r,g,b), min=Math.min(r,g,b), d=max-min;
+  let h=0;
+  if (d>0) {
+    if (max===r) h=(((g-b)/d)%6+6)%6*60;
+    else if (max===g) h=((b-r)/d+2)*60;
+    else h=((r-g)/d+4)*60;
+  }
+  return {h, s: max>0?d/max:0, v: max};
+}
+
+function numColor(n) {
+  if (n === 0) return 'green';
+  return RED_NUMS.has(n) ? 'red' : 'black';
+}
+
+function setStep(active) {
+  ['s0','s1','s2','s3'].forEach((id,i) => {
+    const el = document.getElementById(id);
+    el.className = 'step' + (i < active ? ' done' : i === active ? ' active' : '');
+  });
+}
+
+function setLabel(txt) { document.getElementById('stepLabel').textContent = txt; }
+
+function log(msg, cls='') {
+  const span = document.createElement('span');
+  span.className = cls;
+  span.textContent = msg + '\n';
+  logEl.appendChild(span);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function resetAll() {
+  stopTrack();
+  calibStep = 0; wheelCenter = null; wheelRadius = 0; markerHue = null;
+  trackData = []; prediction = null;
+  document.getElementById('predCard').style.display = 'none';
+  document.getElementById('btnTrack').disabled = true;
+  setStep(0);
+  setLabel('Step 1 — tap the center of the wheel');
+  camLabel.textContent = 'Tap to calibrate';
+  tapEl.style.display = 'none';
+  ctx.clearRect(0, 0, overlay.width, overlay.height);
+  log('Reset.', 'warn');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════
+startCamera();
+
+// Keep overlay in sync with video size
+video.addEventListener('loadedmetadata', () => {
+  overlay.width  = video.videoWidth;
+  overlay.height = video.videoHeight;
+});
+
+// Redraw overlay every 200ms when not tracking (for calibration feedback)
+setInterval(() => {
+  if (!tracking && calibStep > 0) drawOverlay();
+}, 200);
+</script>
+</body>
+</html>
