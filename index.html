@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
-<head> 
+<head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -29,7 +29,7 @@
     min-height: 100vh;
     overflow-x: hidden;
     user-select: none;
-  } 
+  }
 
   /* ── Background texture ─────────────────────────── */
   body::before {
@@ -491,16 +491,24 @@ function startTrack() {
   if (!wheelCenter || wheelRadius < 10) {
     log('Please calibrate first', 'warn'); return;
   }
-  tracking = true;
+  // ── Always clear previous spin data ──
+  clearInterval(trackTimer);
   trackData = [];
   prediction = null;
+  lastSpoken = null;
   document.getElementById('predCard').style.display = 'none';
+  document.getElementById('bigNum').textContent = '—';
+  document.getElementById('confPct').textContent = '0%';
+  document.getElementById('confArc').style.strokeDashoffset = '176';
+  document.getElementById('nearbyRow').innerHTML = '';
+
+  tracking = true;
   document.getElementById('btnTrack').textContent = '⏹ Stop';
   document.getElementById('btnTrack').style.background = 'linear-gradient(135deg,#5c1a1a,#330d0d)';
   document.getElementById('btnTrack').style.color = '#e74c3c';
   document.getElementById('btnCalib').disabled = true;
-  setLabel('Tracking… keep glasses/phone still');
-  log('Tracking started', 'ok');
+  setLabel('Tracking… keep phone still');
+  log('── New spin started ──', 'ok');
   trackTimer = setInterval(trackFrame, SAMPLE_MS);
 }
 
